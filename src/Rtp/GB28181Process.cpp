@@ -14,6 +14,7 @@
 #include "Http/HttpTSPlayer.h"
 #include "Extension/CommonRtp.h"
 #include "Extension/H264Rtp.h"
+#include "Extension/H265Rtp.h"
 
 namespace mediakit{
 
@@ -42,6 +43,12 @@ void GB28181Process::onRtpSorted(RtpPacket::Ptr rtp, int) {
                 //H264负载
                 _rtp_decoder = std::make_shared<H264RtpDecoder>();
                 _interface->addTrack(std::make_shared<H264Track>());
+                break;
+            }
+            case 99: {
+                //H265负载
+                _rtp_decoder = std::make_shared<H265RtpDecoder>();
+                _interface->addTrack(std::make_shared<H265Track>());
                 break;
             }
             default: {
@@ -98,6 +105,12 @@ const char *GB28181Process::onSearchPacketTail(const char *packet,size_t bytes){
 void GB28181Process::onRtpDecode(const Frame::Ptr &frame) {
     if (frame->getCodecId() == CodecH264) {
         //这是H264
+        _interface->inputFrame(frame);
+        return;
+    }
+
+    if (frame->getCodecId() == CodecH265) {
+        //这是H265
         _interface->inputFrame(frame);
         return;
     }
