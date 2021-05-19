@@ -86,8 +86,10 @@ onceToken token1([](){
 namespace RtpProxy {
 #define RTP_PROXY_FIELD "rtp_proxy."
 const string kPort = RTP_PROXY_FIELD"port";
+const string kNumber = RTP_PROXY_FIELD"number";
 onceToken token1([](){
     mINI::Instance()[kPort] = 10000;
+    mINI::Instance()[kNumber] = 3;
 },nullptr);
 } //namespace RtpProxy
 
@@ -159,6 +161,13 @@ public:
                                  throw ExitException();
                              });
 #endif
+        (*_parser) << Option('o',/*该选项简称，如果是\x00则说明无简称*/
+                             "logdir",/*该选项全称,每个选项必须有全称；不得为null或空字符串*/
+                             Option::ArgRequired,/*该选项后面必须跟值*/
+                             (exeDir() + "log/").data(),/*该选项默认值*/
+                             false,/*该选项是否必须赋值，如果没有默认值且为ArgRequired时用户必须提供该参数否则将抛异常*/
+                             "日誌文件路径",/*该选项说明文字*/
+                             nullptr);
     }
 
     ~CMD_main() override{}
@@ -231,7 +240,8 @@ int start_main(int argc,char *argv[]) {
         //设置日志
         Logger::Instance().add(std::make_shared<ConsoleChannel>("ConsoleChannel", logLevel));
 #ifndef ANDROID
-        auto fileChannel = std::make_shared<FileChannel>("FileChannel", exeDir() + "log/", logLevel);
+        string logDir = cmd_main["logdir"];
+        auto fileChannel = std::make_shared<FileChannel>("FileChannel", logDir, logLevel);
         //日志最多保存天数
         fileChannel->setMaxDay(cmd_main["max_day"]);
         Logger::Instance().add(fileChannel);
@@ -274,6 +284,7 @@ int start_main(int argc,char *argv[]) {
         uint16_t httpPort = mINI::Instance()[Http::kPort];
         uint16_t httpsPort = mINI::Instance()[Http::kSSLPort];
         uint16_t rtpPort = mINI::Instance()[RtpProxy::kPort];
+        uint16_t rtpServerNumber = mINI::Instance()[RtpProxy::kNumber];
 
         //设置poller线程数,该函数必须在使用ZLToolKit网络相关对象之前调用才能生效
         EventPollerPool::setPoolSize(threads);
@@ -296,7 +307,10 @@ int start_main(int argc,char *argv[]) {
 
 #if defined(ENABLE_RTPPROXY)
         //GB28181 rtp推流端口，支持UDP/TCP
-        RtpServer::Ptr rtpServer = std::make_shared<RtpServer>();
+        std::vector<RtpServer::Ptr> rtpServers;
+        for (int i = 0; i < rtpServerNumber; ++i) {
+            rtpServers.push_back(std::make_shared<RtpServer>());
+        }
 #endif//defined(ENABLE_RTPPROXY)
 
         try {
@@ -320,7 +334,11 @@ int start_main(int argc,char *argv[]) {
 
 #if defined(ENABLE_RTPPROXY)
             //创建rtp服务器
-            if(rtpPort){ rtpServer->start(rtpPort); }
+            if (rtpPort) {
+                for (int i = 0; i < rtpServerNumber; ++i) {
+                    rtpServers[i]->start(rtpPort + i, std::to_string(i), false);
+                }
+            }
 #endif//defined(ENABLE_RTPPROXY)
 
         }catch (std::exception &ex){
@@ -374,5 +392,3 @@ int main(int argc,char *argv[]) {
     return start_main(argc,argv);
 }
 #endif //DISABLE_MAIN
-
-
